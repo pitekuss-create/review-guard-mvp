@@ -1,14 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface Organization {
+  id: string;
+  name: string;
+  contract_end_date?: string | null;
+}
+
 interface StoreState {
   currentStoreId: string | null;
   userRole: 'STORE_OWNER' | 'HQ_ADMIN' | 'SUPER_ADMIN' | null;
   organizationId: string | null;
+  organization: Organization | null;
   accessibleStores: Array<{ id: string; name: string; place_url?: string | null }>;
+  userEmail: string | null;
 
   setCurrentStoreId: (id: string) => void;
-  setUserInfo: (info: { role: any, orgId: string | null, stores: any[] }) => void;
+  setUserInfo: (info: { role: any, orgId: string | null, organization?: Organization | null, stores: any[], email?: string | null }) => void;
   reset: () => void;
 }
 
@@ -19,7 +27,9 @@ export const useStore = create<StoreState>()(
       currentStoreId: null,
       userRole: null,
       organizationId: null,
+      organization: null,
       accessibleStores: [],
+      userEmail: null,
 
       setCurrentStoreId: (id) => set({ currentStoreId: id }),
 
@@ -31,7 +41,9 @@ export const useStore = create<StoreState>()(
           return {
             userRole: info.role,
             organizationId: info.orgId,
+            organization: info.organization || null,
             accessibleStores: info.stores,
+            userEmail: info.email || state.userEmail,
             currentStoreId: isCurrentStoreValid
               ? state.currentStoreId
               : info.stores.length > 0
@@ -45,7 +57,9 @@ export const useStore = create<StoreState>()(
           currentStoreId: null,
           userRole: null,
           organizationId: null,
+          organization: null,
           accessibleStores: [],
+          userEmail: null,
         }),
     }),
     {

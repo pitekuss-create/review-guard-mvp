@@ -8,8 +8,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
 
 export default function ExpirationBanner() {
-  const { currentStoreId } = useStore();
-  const [bannerInfo, setBannerInfo] = useState<{ message: string; show: boolean } | null>(null);
+  const { currentStoreId, userRole } = useStore();
+  const [bannerInfo, setBannerInfo] = useState<{ message: string; show: boolean; isStoreOwner?: boolean } | null>(null);
 
   // 🚀 결제 직후 배너 삭제 로직 추가
   const [isJustPaid, setIsJustPaid] = useState(false);
@@ -33,46 +33,61 @@ export default function ExpirationBanner() {
 
         const isHq = window.location.pathname.startsWith('/hq');
 
-        // 1. 타임머신 테스트를 위한 매장별 trial_start_date (오버라이드용) - 본사(HQ)에서는 무시
-        let timeMachineExpired = false;
+        let isHqSponsored = false;
+        let isExpired = false;
+
         if (!isHq && currentStoreId) {
           const { data: storeData } = await supabase
             .from("stores")
-            .select("trial_start_date")
+            .select("trial_start_date, is_hq_sponsored, subscription_expires_at")
             .eq("id", currentStoreId)
             .single();
             
-          if (storeData?.trial_start_date) {
-            const trialStart = new Date(storeData.trial_start_date);
-            const trialEnd = new Date(trialStart);
-            trialEnd.setDate(trialEnd.getDate() + 14); // 14일 만료일
+          isHqSponsored = storeData?.is_hq_sponsored || false;
             
-            if (trialEnd < new Date()) {
-              timeMachineExpired = true;
-            }
+          const now = new Date();
+          
+          if (storeData?.trial_start_date) {
+            const trialEnd = new Date(storeData.trial_start_date);
+            trialEnd.setDate(trialEnd.getDate() + 14);
+            if (trialEnd < now) isExpired = true;
+          }
+
+          if (storeData?.subscription_expires_at) {
+            const expiry = new Date(storeData.subscription_expires_at);
+            isExpired = expiry < now;
           }
         }
 
-        // 2. 기본 구독 정보 가져오기
         const { data: roleData } = await supabase
           .from("user_roles")
-          .select("subscription_ends_at")
+          .select("role")
           .eq("user_id", user.id)
           .single();
 
-        let dbExpired = false;
-        if (roleData?.subscription_ends_at) {
-          const now = new Date();
-          const expiry = new Date(roleData.subscription_ends_at);
-          if (expiry < now) dbExpired = true;
-        }
-
-        // 🚀 OR 조건: 타임머신에서 강제로 만료시켰거나 OR 실제 DB 구독이 만료되었을 때
-        if (timeMachineExpired || dbExpired) {
-          setBannerInfo({
-            message: "이용 기간이 만료되었습니다. 서비스 이용을 위해 결제가 필요합니다.",
-            show: true
-          });
+        if (isExpired) {
+          const currentRole = roleData?.role || userRole;
+          if (currentRole === "HQ_ADMIN" || currentRole === "SUPER_ADMIN" || currentRole === "hq") {
+            setBannerInfo({
+              message: "가맹점 결제가 만료되었습니다.",
+              show: true,
+              isStoreOwner: false
+            });
+          } else {
+            if (isHqSponsored) {
+              setBannerInfo({
+                message: "프랜차이즈 본사 통합 결제가 만료되어 QR 및 기능이 제한되었습니다. 본사 담당자에게 문의해 주세요.",
+                show: true,
+                isStoreOwner: true
+              });
+            } else {
+              setBannerInfo({
+                message: "결제가 만료되어 기능이 제한되었습니다.",
+                show: true,
+                isStoreOwner: false
+              });
+            }
+          }
         } else {
           setBannerInfo({ message: "", show: false });
         }
@@ -94,12 +109,14 @@ export default function ExpirationBanner() {
         <span className="text-xs font-black tracking-tight sm:text-sm">
           {bannerInfo.message}
         </span>
-        <Link
-          href="/pricing"
-          className="ml-4 flex-shrink-0 rounded-lg bg-white px-3 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50 transition active:scale-95 shadow-sm"
-        >
-          결제하러 가기
-        </Link>
+        {!bannerInfo.isStoreOwner && (
+          <Link
+            href="/pricing"
+            className="ml-4 flex-shrink-0 rounded-lg bg-white px-3 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50 transition active:scale-95 shadow-sm"
+          >
+            연장 결제하기
+          </Link>
+        )}
       </div>
     </div>
   );

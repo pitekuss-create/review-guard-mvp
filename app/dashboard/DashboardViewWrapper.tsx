@@ -5,8 +5,8 @@ import AnalysisReport from "./AnalysisReport";
 import StoreProfileEditor from "./StoreProfileEditor";
 import KeywordManager from "./KeywordManager";
 import ManualReplyGenerator from "./ManualReplyGenerator";
-import QRCodeWidget from "./QRCodeWidget";
 import NaverConnectionWidget from "./NaverConnectionWidget";
+import QRCodeWidget from "./QRCodeWidget";
 import ReviewTable, { type ReviewRow } from "./ReviewTable";
 import HQOverview from "./HQOverview";
 import { ArrowLeft, Zap } from "lucide-react";
@@ -15,11 +15,13 @@ import Link from "next/link";
 export default function DashboardViewWrapper({
   initialStoreId,
   initialRole,
-  isFromHqSelection = false
+  isFromHqSelection = false,
+  isDemoMode = false
 }: {
   initialStoreId: string;
   initialRole: string;
   isFromHqSelection?: boolean;
+  isDemoMode?: boolean;
 }) {
   const { currentStoreId, setCurrentStoreId, accessibleStores } = useStore();
 
@@ -34,11 +36,24 @@ export default function DashboardViewWrapper({
 
   // 🚀 [수술 3]: 현재 매장이 프랜차이즈 소속(orgId 존재)인지 판별하는 무적 패스 로직 추가!
   const currentStoreData = accessibleStores.find(s => s.id === currentStoreId);
-  const isHqStore = !!(currentStoreData as any)?.organization_id;// 본사 코드가 있으면 무조건 true
+  const isHqStore = !!(currentStoreData as any)?.organization_id;
 
-  // 본사 가맹점(isHqStore)이라면 돈을 안 내도 무조건 PRO 유저로 취급해버림!
-  const isBasicUser = ["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore;
-  const isProUser = ["PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore;
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
+
+  const isBasicUser = !isExpired && (["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore);
+  const isProUser = !isExpired && (["PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore);
 
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -108,10 +123,10 @@ export default function DashboardViewWrapper({
                 <StoreProfileEditor storeId={currentStoreId || ""} initialName={currentStoreData?.name || ""} />
 
                 {/* 2. 베이직 리포트 & 프리미엄 상권 분석 */}
-                <AnalysisReport reviews={reviews} storeId={currentStoreId || ""} />
+                <AnalysisReport reviews={reviews} storeId={currentStoreId || ""} isDemoMode={isDemoMode} />
 
                 {/* 3. PRO 유도 배너 (이동됨) */}
-                <Link href="/dashboard/pro-analytics" className="mb-6 group relative flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#1a1d2b] to-[#161822] p-4 ring-1 ring-fuchsia-500/20 hover:ring-fuchsia-500/40 transition-all overflow-hidden shadow-lg">
+                <Link href={currentStoreId ? `/dashboard/pro-analytics?storeId=${currentStoreId}` : "/dashboard/pro-analytics"} className="mb-6 group relative flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#1a1d2b] to-[#161822] p-4 ring-1 ring-fuchsia-500/20 hover:ring-fuchsia-500/40 transition-all overflow-hidden shadow-lg">
                   <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/5 to-indigo-500/5 group-hover:from-fuchsia-500/10 group-hover:to-indigo-500/10 transition-colors" />
                   <div className="absolute -left-10 top-1/2 -translate-y-1/2 w-32 h-32 bg-fuchsia-500/20 blur-[50px] rounded-full" />
                   <div className="relative flex items-center gap-4 z-10">

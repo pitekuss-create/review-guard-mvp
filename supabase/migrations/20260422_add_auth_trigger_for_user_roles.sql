@@ -3,7 +3,10 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, 'STORE_OWNER')
+  VALUES (
+    NEW.id, 
+    'STORE_OWNER'
+  )
   ON CONFLICT (user_id) DO NOTHING;
   RETURN NEW;
 END;

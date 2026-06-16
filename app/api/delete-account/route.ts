@@ -1,4 +1,4 @@
-import { NextResponse } from "next/response";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
@@ -24,7 +24,7 @@ export async function POST() {
         .from("reviews_log")
         .delete()
         .eq("store_id", storeData.id);
-        
+
       if (reviewError) {
         console.error("[delete-account] Failed to delete reviews:", reviewError.message);
       }
@@ -39,7 +39,7 @@ export async function POST() {
         console.error("[delete-account] Failed to delete store:", storeError.message);
       }
     }
-    
+
     // 4. Supabase Auth 유저 최종 삭제 (Admin Key가 있을 경우만)
     if (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_URL) {
       try {

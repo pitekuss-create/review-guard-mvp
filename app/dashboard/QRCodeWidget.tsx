@@ -3,7 +3,9 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import PaywallModal from "./PaywallModal";
+import TableTentRequestModal from "./TableTentRequestModal";
 import { getTrialStatus } from "@/lib/trialUtils";
+import { useStore } from "@/lib/store/useStore";
 
 function getBaseUrl(): string {
   if (typeof window !== "undefined") {
@@ -15,34 +17,32 @@ function getBaseUrl(): string {
 export default function QRCodeWidget({ storeId }: { storeId: string }) {
   const [downloaded, setDownloaded] = useState(false);
   const [inlineShowTrial, setInlineShowTrial] = useState(false);
-  const [trialExpired, setTrialExpired] = useState(false);
-  const [loadingTrial, setLoadingTrial] = useState(true);
+  const { accessibleStores, currentStoreId } = useStore() as any;
+  const currentStoreData = accessibleStores?.find((s: any) => s.id === currentStoreId);
+  const isHqStore = !!((currentStoreData as any)?.organization_id || (currentStoreData as any)?.is_hq_sponsored);
+
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
   const [isCopied, setIsCopied] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
+  const [showTableTentModal, setShowTableTentModal] = useState(false);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
-
-  // Check trial status on mount
-  useEffect(() => {
-    const checkTrial = async () => {
-      try {
-        const res = await fetch(`/api/store-concept?storeId=${storeId}`);
-        const json = await res.json();
-        const trialStatus = getTrialStatus(json.trialStartDate || null);
-        setTrialExpired(trialStatus.isExpired);
-      } catch (error) {
-        console.error("Failed to check trial status:", error);
-        setTrialExpired(false); // Default to not expired on error
-      } finally {
-        setLoadingTrial(false);
-      }
-    };
-    checkTrial();
-  }, []);
 
   const qrUrl = `${getBaseUrl()}/review?storeId=${storeId}`;
 
   const handleDownload = useCallback(() => {
-    if (trialExpired) {
+    if (isExpired) {
       setShowPaywallModal(true);
       return;
     }
@@ -63,7 +63,7 @@ export default function QRCodeWidget({ storeId }: { storeId: string }) {
 
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 3000);
-  }, [storeId, trialExpired]);
+  }, [storeId, isExpired]);
 
   if (!storeId) {
     return (
@@ -126,11 +126,10 @@ export default function QRCodeWidget({ storeId }: { storeId: string }) {
                     setIsCopied(true);
                     setTimeout(() => setIsCopied(false), 2000);
                   }}
-                  className={`flex-shrink-0 rounded-md px-2.5 py-1 text-[10px] font-medium transition active:scale-95 ${
-                    isCopied
-                      ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/50"
-                      : "bg-white/5 text-zinc-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-zinc-200"
-                  }`}
+                  className={`flex-shrink-0 rounded-md px-2.5 py-1 text-[10px] font-medium transition active:scale-95 ${isCopied
+                    ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/50"
+                    : "bg-white/5 text-zinc-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-zinc-200"
+                    }`}
                 >
                   {isCopied ? "복사 완료 ✅" : "복사"}
                 </button>
@@ -140,7 +139,14 @@ export default function QRCodeWidget({ storeId }: { storeId: string }) {
             {/* 다운로드 버튼 */}
             <button
               type="button"
-              onClick={handleDownload}
+              onClick={(e) => {
+                if (isExpired) {
+                  e.preventDefault();
+                  setShowPaywallModal(true);
+                  return;
+                }
+                handleDownload();
+              }}
               className="inline-flex h-[46px] items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 text-sm font-semibold text-white shadow-lg shadow-teal-600/20 transition hover:bg-teal-500 active:scale-[0.98]"
             >
               {downloaded ? (
@@ -159,7 +165,16 @@ export default function QRCodeWidget({ storeId }: { storeId: string }) {
                 </>
               )}
             </button>
-            
+
+            {/* 테이블 텐트 신청 버튼 */}
+            <button
+              type="button"
+              onClick={(e) => { if (isExpired) { e.preventDefault(); setShowPaywallModal(true); return; } setShowTableTentModal(true); }}
+              className="inline-flex h-[46px] items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 text-sm font-semibold text-white shadow-lg shadow-purple-600/20 transition hover:bg-purple-500 active:scale-[0.98]"
+            >
+              테이블 텐트 무료 신청
+            </button>
+
             {/* Inline Trial Notification */}
             {inlineShowTrial && (
               <div className="mt-2 animate-[fadeSlideUp_0.2s_ease-out] rounded-lg bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-400 ring-1 ring-emerald-500/20">
@@ -174,10 +189,11 @@ export default function QRCodeWidget({ storeId }: { storeId: string }) {
           </div>
         </div>
       </div>
-      
+
       {showPaywallModal && (
-        <PaywallModal isOpen={showPaywallModal} onClose={() => setShowPaywallModal(false)} />
+        <PaywallModal isOpen={showPaywallModal} onClose={() => setShowPaywallModal(false)} isHq={isHqStore} />
       )}
+      {showTableTentModal && <TableTentRequestModal isOpen={showTableTentModal} onClose={() => setShowTableTentModal(false)} />}
     </section>
   );
 }

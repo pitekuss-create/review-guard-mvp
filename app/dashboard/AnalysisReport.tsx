@@ -23,10 +23,12 @@ const PIE_COLORS = ["#34d399", "#fb7185"]; // Emerald(Pos), Rose(Neg)
 
 export default function AnalysisReport({
   reviews,
-  storeId
+  storeId,
+  isDemoMode = false
 }: {
   reviews: ReviewRow[];
   storeId: string;
+  isDemoMode?: boolean;
 }) {
   // 🚀 [수술 1]: AnalysisReport에도 프랜차이즈 무적 방어막 이식 (변수명 수정 완벽판)
   const { userRole, currentStoreId, accessibleStores } = useStore();
@@ -39,14 +41,57 @@ export default function AnalysisReport({
   })();
 
   const currentStoreData = accessibleStores?.find(s => s.id === currentStoreId);
-  const isHqStore = !!(currentStoreData as any)?.organization_id; // 본사 코드가 있으면 true
+  const isHqStore = !!(currentStoreData as any)?.organization_id;
 
-  // 🚀 [팩트 체크 완료]: 변수명을 isPaidUser가 아니라 기존 파일에 맞게 isProUser로 맞춰야 합니다!
-  const isProUser = ["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore;
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
+
+  const isProUser = !isExpired && (["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore);
   const [premiumToast, setPremiumToast] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   const stats = useMemo(() => {
+    if (isDemoMode && reviews.length === 0) {
+      return {
+        pieData: [
+          { name: "긍정", value: 92 },
+          { name: "부정", value: 8 },
+        ],
+        barData: [
+          { name: "월", 리뷰: 12 },
+          { name: "화", 리뷰: 19 },
+          { name: "수", 리뷰: 15 },
+          { name: "목", 리뷰: 22 },
+          { name: "금", 리뷰: 34 },
+          { name: "토", 리뷰: 45 },
+          { name: "일", 리뷰: 28 },
+        ],
+        topKeywords: [
+          { word: "친절함", weight: 32 },
+          { word: "맛있음", weight: 28 },
+          { word: "청결함", weight: 20 },
+          { word: "인테리어", weight: 15 },
+          { word: "가성비", weight: 12 },
+        ],
+        total: 175,
+        copied: 162,
+        convRate: "92.6",
+        neg: 8,
+        dailyNegCount: [1, 2, 0, 1, 2, 1, 1],
+      };
+    }
+
     let pos = 0;
     let neg = 0;
     const dailyCount: Record<string, number> = {
@@ -107,12 +152,12 @@ export default function AnalysisReport({
     const dailyNegCount = dayMap.slice(1).concat(dayMap[0]).map(day => dailyNegCountMap[day]);
 
     return { pieData, barData, topKeywords, total, copied, convRate, neg, dailyNegCount };
-  }, [reviews]);
+  }, [reviews, isDemoMode]);
 
   return (
     <div className="mb-8">
       {/* 🚀 리뷰가 0건일 때는 빈 상태 UI만 렌더링하고, 하단 프로 기능은 조건문 밖에서 무조건 렌더링! */}
-      {reviews.length === 0 ? (
+      {reviews.length === 0 && !isDemoMode ? (
         <div className="mb-10 flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 py-20 text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">
             📊
@@ -300,6 +345,7 @@ export default function AnalysisReport({
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
         storeName="우리 매장"
+        reviews={reviews}
       />
     </div>
   );

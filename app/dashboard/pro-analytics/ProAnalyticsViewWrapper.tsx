@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useStore } from "@/lib/store/useStore";
 import Link from "next/link";
 import VelocityTrackerWidget from "../VelocityTrackerWidget";
@@ -7,16 +7,35 @@ import RoiBoardWidget from "../RoiBoardWidget";
 import ComplaintTrendWidget from "../ComplaintTrendWidget";
 import CompetitorXRay from "../CompetitorXRay";
 
+const DEMO_EMAILS = ['seoulbowl@naver.com', 'seoulbowl_store@naver.com', 'seoulbowl_solo@naver.com'];
+
+const DEMO_COMPLAINTS = [
+  { word: "대기 시간", count: 18, trend: "up" as const },
+  { word: "주차 불편", count: 12, trend: "up" as const },
+  { word: "직원 불친절", count: 8, trend: "down" as const },
+  { word: "음식 온도", count: 5, trend: "same" as const },
+  { word: "위생 상태", count: 3, trend: "down" as const }
+];
+
 export default function ProAnalyticsViewWrapper({
   initialStoreId,
   initialRole,
-  isFromHqSelection = false
+  isFromHqSelection = false,
+  userEmail,
+  isDemoMode: isDemoModeProp
 }: {
   initialStoreId: string;
   initialRole: string;
   isFromHqSelection?: boolean;
+  userEmail?: string | null;
+  isDemoMode?: boolean;
 }) {
-  const { currentStoreId, setCurrentStoreId, accessibleStores } = useStore();
+  const { currentStoreId, setCurrentStoreId, accessibleStores, userEmail: storeEmail } = useStore();
+  const activeEmail = userEmail || storeEmail || "";
+  const isDemoMode = typeof isDemoModeProp === "boolean" ? isDemoModeProp : DEMO_EMAILS.includes(activeEmail);
+
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [isReviewsLoading, setIsReviewsLoading] = useState(false);
 
   const [activeRole] = useState<string>(() => {
     if (typeof window === "undefined") return initialRole.toUpperCase();
@@ -30,7 +49,21 @@ export default function ProAnalyticsViewWrapper({
   const currentStoreData = accessibleStores.find(s => s.id === currentStoreId);
   const isHqStore = !!(currentStoreData as any)?.organization_id;
   
-  const isProUser = ["PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore;
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
+  
+  const isProUser = isDemoMode || (!isExpired && (["PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore));
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -38,7 +71,51 @@ export default function ProAnalyticsViewWrapper({
     setIsInitialized(true);
   }, [initialStoreId, setCurrentStoreId]);
 
-  if (!isInitialized) {
+  useEffect(() => {
+    if (isDemoMode) {
+      setReviews([]);
+      return;
+    }
+    if (currentStoreId) {
+      setIsReviewsLoading(true);
+      fetch(`/api/reviews?storeId=${currentStoreId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.reviews) setReviews(data.reviews);
+        })
+        .catch(err => console.error(err))
+        .finally(() => setIsReviewsLoading(false));
+    }
+  }, [currentStoreId, isDemoMode]);
+
+  const complaintsData = useMemo(() => {
+    if (isDemoMode) {
+      return DEMO_COMPLAINTS;
+    }
+    const negReviews = reviews.filter((r: any) => r.rating <= 3);
+    const tagCounts: Record<string, number> = {};
+    negReviews.forEach((r: any) => {
+      if (r.selected_tags) {
+        r.selected_tags.split(",").forEach((tag: string) => {
+          const cleaned = tag.trim();
+          if (cleaned) {
+            tagCounts[cleaned] = (tagCounts[cleaned] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    return Object.entries(tagCounts)
+      .map(([word, count]) => ({
+        word,
+        count,
+        trend: "same" as const
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [reviews, isDemoMode]);
+
+  if (!isInitialized || (isReviewsLoading && !isDemoMode)) {
     return (
       <main className="mx-auto max-w-7xl px-6 py-20 flex flex-col items-center justify-center min-h-[400px]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-800 border-t-white mb-4" />
@@ -58,11 +135,11 @@ export default function ProAnalyticsViewWrapper({
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#12141c] to-[#0f1117] ring-1 ring-white/[0.06] shadow-xl p-6 mb-8">
         <div className={`transition-all duration-500 ${!isProUser ? 'filter blur-[12px] opacity-30 select-none pointer-events-none' : ''}`}>
           <div className="grid gap-6 lg:grid-cols-2 mb-6">
-            <VelocityTrackerWidget />
-            <RoiBoardWidget />
+            <VelocityTrackerWidget reviews={reviews} isDemoMode={isDemoMode} />
+            <RoiBoardWidget reviews={reviews} isDemoMode={isDemoMode} />
           </div>
           <div className="grid gap-6 grid-cols-1">
-            <ComplaintTrendWidget hasData={true} />
+            <ComplaintTrendWidget complaints={complaintsData} hasData={isDemoMode ? true : reviews.length > 0} />
           </div>
         </div>
 
@@ -96,7 +173,7 @@ export default function ProAnalyticsViewWrapper({
 
       <div className="relative mb-12">
         <div className={!isProUser ? 'pointer-events-none select-none opacity-20 filter blur-[10px] transition-all duration-500' : 'transition-all duration-500'}>
-          <CompetitorXRay />
+          <CompetitorXRay isDemoMode={isDemoMode} />
         </div>
 
         {!isProUser && (

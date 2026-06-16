@@ -264,7 +264,7 @@ export default function Home() {
             href="/pricing"
             className="btn-primary animate-glow inline-flex items-center gap-3 bg-gradient-to-r from-[#0088ff] to-[#00ccff] text-white font-black text-[clamp(1rem,2.5vw,1.2rem)] px-10 py-5 rounded-2xl shadow-2xl"
           >
-            무료로 시작하기
+            고급 테이블 텐트 무상 지원받기
             <ArrowRight className="w-5 h-5" />
           </Link>
           <span className="text-white/30 text-sm">신용카드 불필요 · 즉시 시작</span>
@@ -776,7 +776,7 @@ export default function Home() {
             className="btn-primary animate-glow inline-flex items-center gap-4 bg-gradient-to-r from-[#0066ff] via-[#0099ff] to-[#00ccff] text-white font-black text-[clamp(1.1rem,2.5vw,1.4rem)] px-12 py-6 rounded-2xl shadow-2xl mb-8"
           >
             <Zap className="w-6 h-6" />
-            무료 체험 시작하기
+            고급 테이블 텐트 무상 지원받기
             <ArrowRight className="w-6 h-6" />
           </Link>
 

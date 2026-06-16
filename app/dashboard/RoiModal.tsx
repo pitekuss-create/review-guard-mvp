@@ -100,6 +100,8 @@ export default function RoiModal() {
 
   if (!isOpen || loading) return null;
 
+  const daysUsed = Math.max(0, 14 - stats.daysRemaining);
+
   const statsData = [
     {
       icon: (
@@ -171,7 +173,7 @@ export default function RoiModal() {
               놓치지 마세요
             </h2>
             <p className="mb-6 text-center text-sm leading-relaxed text-zinc-400">
-              ReviewGuard가 지난 11일간 만들어낸 <br />
+              ReviewGuard가 지난 {daysUsed}일간 만들어낸 <br />
               <strong className="text-zinc-200">사장님의 실제 성과</strong>입니다.
             </p>
 
@@ -213,7 +215,7 @@ export default function RoiModal() {
                 onClick={handlePayClick}
                 className="flex-[2] rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/30 ring-1 ring-white/20 transition-all hover:from-emerald-400 hover:to-green-500 active:scale-[0.97]"
               >
-                월 30,000원으로 성과 이어가기
+                월 29,000원으로 성과 이어가기
               </button>
             </div>
 

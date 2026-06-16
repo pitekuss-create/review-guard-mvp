@@ -14,14 +14,15 @@ export async function GET() {
   // 1. 유저 권한 조회 (장부에 없더라도 에러로 튕기지 않고 '일반 사장님'으로 취급)
   const { data: roleData, error: roleError } = await supabase
     .from("user_roles")
-    .select("role, organization_id")
+    .select("role, organization_id, organizations(id, name, contract_end_date)")
     .eq("user_id", user.id)
     .single();
 
   const role = (!roleError && roleData) ? roleData.role : 'STORE_OWNER';
   const orgId = (!roleError && roleData) ? roleData.organization_id : null;
+  const organization = (!roleError && roleData) ? roleData.organizations : null;
 
-  let storesQuery = supabase.from("stores").select("id, name, place_url, organization_id");
+  let storesQuery = supabase.from("stores").select("id, name, place_url, organization_id, trial_start_date, subscription_expires_at, is_hq_sponsored, subscription_tier");
 
   // 2. 권한별 매장 필터링 (이제 무조건 stores 테이블을 뒤집니다)
   if (role === 'SUPER_ADMIN') {
@@ -43,6 +44,8 @@ export async function GET() {
   return NextResponse.json({
     role: role,
     organization_id: orgId,
-    stores: stores || []
+    organization: organization,
+    stores: stores || [],
+    email: user.email
   });
 }

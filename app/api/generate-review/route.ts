@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 /* 매장 컨셉 및 주소 조회 */
-async function getStoreConcept(storeId: string): Promise<{ concept: string; placeUrl: string; trialStartDate: string | null }> {
+async function getStoreConcept(storeId: string): Promise<{ concept: string; placeUrl: string; trialStartDate: string | null; subscriptionTier: string; isHqSponsored: boolean }> {
   // 하드코딩된 Supabase 정보 (MVP 테스트용 유지)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -15,7 +15,7 @@ async function getStoreConcept(storeId: string): Promise<{ concept: string; plac
   const supabase = createClient(supabaseUrl, supabaseKey);
   const { data, error } = await supabase
     .from("stores")
-    .select("concept, place_url, trial_start_date")
+    .select("concept, place_url, trial_start_date, subscription_tier, is_hq_sponsored")
     .eq("id", storeId)
     .single();
 
@@ -30,7 +30,9 @@ async function getStoreConcept(storeId: string): Promise<{ concept: string; plac
   return {
     concept: data?.concept ?? "",
     placeUrl: fetchedUrl,
-    trialStartDate: data?.trial_start_date ?? null
+    trialStartDate: data?.trial_start_date ?? null,
+    subscriptionTier: data?.subscription_tier ?? "FREE",
+    isHqSponsored: data?.is_hq_sponsored ?? false
   };
 }
 
@@ -47,19 +49,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const storeData = storeId ? await getStoreConcept(storeId) : { concept: "", placeUrl: "", trialStartDate: null };
+    const storeData = storeId ? await getStoreConcept(storeId) : { concept: "", placeUrl: "", trialStartDate: null, subscriptionTier: "FREE", isHqSponsored: false };
 
-    // [Billing Lock] 트라이얼 기간(14일) 체크
-    if (storeData.trialStartDate) {
-      const trialStart = new Date(storeData.trialStartDate);
-      const now = new Date();
-      const diffInDays = (now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24);
+    // [Billing Lock] 요금제 및 본사 지원 검증
+    if (!storeData.isHqSponsored && storeData.subscriptionTier === "FREE") {
+      if (storeData.trialStartDate) {
+        const trialStart = new Date(storeData.trialStartDate);
+        const now = new Date();
+        const diffInDays = (now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24);
 
-      if (diffInDays > 14) {
-        return NextResponse.json(
-          { error: "무료 체험 기간이 만료되었습니다. 플랜을 업그레이드하세요." },
-          { status: 403 }
-        );
+        if (diffInDays > 14) {
+          return NextResponse.json(
+            { error: "무료 체험 기간이 만료되었습니다. 플랜을 업그레이드하세요." },
+            { status: 403 }
+          );
+        }
       }
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,15 @@ export default function LoginPage() {
   };
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (token) {
+      sessionStorage.setItem("hq_invite_token", token);
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +49,28 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       setSuccessMsg("로그인 성공! 대시보드로 이동 중...");
-      router.push('/dashboard');
+
+      // 🚀 로그인 성공 후 유저 권한 조회
+      const { data: { user } } = await supabase.auth.getUser();
+      let role = "";
+      if (user) {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        role = roleData?.role ?? "";
+      }
+
+      if (role === 'SUPER_ADMIN') {
+        router.push('/super-admin');
+        router.refresh();
+        return;
+      }
+
+      const savedToken = sessionStorage.getItem("hq_invite_token");
+      const targetUrl = savedToken ? `/dashboard?token=${savedToken}` : '/dashboard';
+      router.push(targetUrl);
       router.refresh();
     }
   };

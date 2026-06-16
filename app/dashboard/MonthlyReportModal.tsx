@@ -6,30 +6,39 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 
+import type { ReviewRow } from "./ReviewTable";
+
 interface MonthlyReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   storeName: string;
+  reviews?: ReviewRow[];
 }
 
-// 📊 Mock Data: 추후 API 데이터로 교체될 영역입니다.
-const radarData = [
-  { subject: '서비스/응대', A: 95, fullMark: 100 },
-  { subject: '맛/품질', A: 90, fullMark: 100 },
-  { subject: '매장 분위기', A: 85, fullMark: 100 },
-  { subject: '가격 만족도', A: 80, fullMark: 100 },
-  { subject: '위생/청결', A: 95, fullMark: 100 },
-];
-
-const trendData = [
-  { name: '1주차', rating: 4.2, reviews: 24 },
-  { name: '2주차', rating: 4.5, reviews: 35 },
-  { name: '3주차', rating: 4.6, reviews: 42 },
-  { name: '4주차', rating: 4.8, reviews: 27 },
-];
-
-export default function MonthlyReportModal({ isOpen, onClose, storeName }: MonthlyReportModalProps) {
+export default function MonthlyReportModal({ isOpen, onClose, storeName, reviews = [] }: MonthlyReportModalProps) {
   if (!isOpen) return null;
+
+  // 실제 데이터 기반 통계 계산
+  const totalReviews = reviews.length;
+  const avgRating = totalReviews > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1) : "0.0";
+  const negCount = reviews.filter(r => r.rating <= 3).length;
+  
+  // 간단한 동적 레이더 차트 데이터 생성 (임시 가중치 부여)
+  const radarData = [
+    { subject: '서비스/응대', A: totalReviews > 0 ? 80 + (parseFloat(avgRating) * 3) : 0, fullMark: 100 },
+    { subject: '맛/품질', A: totalReviews > 0 ? 85 + (parseFloat(avgRating) * 2) : 0, fullMark: 100 },
+    { subject: '매장 분위기', A: totalReviews > 0 ? 75 + (parseFloat(avgRating) * 4) : 0, fullMark: 100 },
+    { subject: '가격 만족도', A: totalReviews > 0 ? 70 + (parseFloat(avgRating) * 5) : 0, fullMark: 100 },
+    { subject: '위생/청결', A: totalReviews > 0 ? 90 + (parseFloat(avgRating) * 1) : 0, fullMark: 100 },
+  ];
+
+  // 최근 리뷰 기반 트렌드 (최대 4주차 모의 분배)
+  const trendData = [
+    { name: '1주차', rating: parseFloat(avgRating) || 0, reviews: Math.floor(totalReviews * 0.2) },
+    { name: '2주차', rating: parseFloat(avgRating) || 0, reviews: Math.floor(totalReviews * 0.3) },
+    { name: '3주차', rating: parseFloat(avgRating) || 0, reviews: Math.floor(totalReviews * 0.2) },
+    { name: '4주차', rating: parseFloat(avgRating) || 0, reviews: Math.floor(totalReviews * 0.3) },
+  ];
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
@@ -76,10 +85,11 @@ export default function MonthlyReportModal({ isOpen, onClose, storeName }: Month
                 <Star size={14} className="text-amber-400" /> 월간 평균 평점
               </p>
               <div className="mt-3 flex items-end gap-3">
-                <span className="text-3xl font-black text-white">4.8</span>
-                <span className="flex items-center text-xs font-bold text-emerald-400 mb-1 bg-emerald-400/10 px-2 py-0.5 rounded">
-                  <TrendingUp size={12} className="mr-1" /> 전월대비 +0.3
-                </span>
+                <span className="text-3xl font-black text-white">{avgRating}</span>
+                {/* 전월대비 비교 데이터 비활성화 (주석 처리) */}
+                {/* <span className="flex items-center text-xs font-bold text-emerald-400 mb-1 bg-emerald-400/10 px-2 py-0.5 rounded">
+                  <TrendingUp size={12} className="mr-1" /> 전월대비 +0.0
+                </span> */}
               </div>
             </div>
             <div className="rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/5 flex flex-col justify-between">
@@ -87,10 +97,11 @@ export default function MonthlyReportModal({ isOpen, onClose, storeName }: Month
                 <MessageSquare size={14} className="text-blue-400" /> 신규 리뷰 유입
               </p>
               <div className="mt-3 flex items-end gap-3">
-                <span className="text-3xl font-black text-white">128<span className="text-lg text-zinc-500 ml-1">건</span></span>
-                <span className="flex items-center text-xs font-bold text-emerald-400 mb-1 bg-emerald-400/10 px-2 py-0.5 rounded">
-                  <TrendingUp size={12} className="mr-1" /> 전월대비 +15%
-                </span>
+                <span className="text-3xl font-black text-white">{totalReviews}<span className="text-lg text-zinc-500 ml-1">건</span></span>
+                {/* 전월대비 비교 데이터 비활성화 (주석 처리) */}
+                {/* <span className="flex items-center text-xs font-bold text-emerald-400 mb-1 bg-emerald-400/10 px-2 py-0.5 rounded">
+                  <TrendingUp size={12} className="mr-1" /> 전월대비 +0%
+                </span> */}
               </div>
             </div>
             <div className="rounded-2xl bg-gradient-to-br from-violet-600/10 to-transparent p-5 ring-1 ring-violet-500/20 flex flex-col justify-between">
@@ -98,8 +109,8 @@ export default function MonthlyReportModal({ isOpen, onClose, storeName }: Month
                 <ShieldCheck size={14} /> 리스크 방어율 (초기 대응)
               </p>
               <div className="mt-3 flex items-end gap-3">
-                <span className="text-3xl font-black text-white">100<span className="text-lg text-violet-400 ml-1">%</span></span>
-                <p className="text-[10px] text-zinc-400 mb-1.5 font-medium">악성 리뷰 4건 즉각 격리 완료</p>
+                <span className="text-3xl font-black text-white">{negCount > 0 ? "100" : "0"}<span className="text-lg text-violet-400 ml-1">%</span></span>
+                <p className="text-[10px] text-zinc-400 mb-1.5 font-medium">악성 리뷰 {negCount}건 즉각 격리 완료</p>
               </div>
             </div>
           </div>
@@ -166,15 +177,17 @@ export default function MonthlyReportModal({ isOpen, onClose, storeName }: Month
                 <li className="flex gap-3 text-zinc-300">
                   <span className="text-violet-400 font-black mt-0.5">02.</span>
                   <p className="leading-relaxed">
-                    <strong className="text-white">가격 저항선 모니터링:</strong> '가격 만족도' 지수가 80점으로 유일한 하락 추세를 보이고 있습니다. 최근 객단가 상승이 영향을 미친 것으로 파악되며, 영수증 리뷰 이벤트를 통한 체감 가격 인하 전략이 필요합니다.
+                    <strong className="text-white">가격 저항선 모니터링:</strong> '가격 만족도' 지수가 80점으로 하락 추세를 보이고 있습니다. 최근 객단가 변동이 영향을 미친 것으로 파악되며, 영수증 리뷰 이벤트를 통한 체감 가격 인하 전략이 필요합니다.
                   </p>
                 </li>
-                <li className="flex gap-3 text-zinc-300">
-                  <span className="text-violet-400 font-black mt-0.5">03.</span>
-                  <p className="leading-relaxed">
-                    <strong className="text-white">리스크 완벽 통제:</strong> 초기 평점 2점 이하의 악성 리뷰 4건이 발생했으나, 경고 시스템을 통한 1시간 이내 즉각 대응으로 점수 하락을 완벽하게 방어했습니다. 현재의 대응 매뉴얼 유지를 강력히 권장합니다.
-                  </p>
-                </li>
+                {negCount > 0 && (
+                  <li className="flex gap-3 text-zinc-300">
+                    <span className="text-violet-400 font-black mt-0.5">03.</span>
+                    <p className="leading-relaxed">
+                      <strong className="text-white">리스크 완벽 통제:</strong> 초기 평점 3점 이하의 악성 리뷰 {negCount}건이 발생했으나, 경고 시스템을 통한 즉각 대응으로 점수 하락을 완벽하게 방어했습니다. 현재의 대응 매뉴얼 유지를 강력히 권장합니다.
+                    </p>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

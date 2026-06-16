@@ -83,7 +83,7 @@ export default async function ProAnalyticsPage(props: {
       <header className="border-b border-white/5 bg-[#0f1117]/80 backdrop-blur-md sticky top-0 z-30">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
-            <a href="/dashboard" className="flex items-center gap-3 group">
+            <a href={initialStoreId ? `/dashboard?storeId=${initialStoreId}` : "/dashboard"} className="flex items-center gap-3 group">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-sm font-bold shadow-lg shadow-fuchsia-500/20 group-hover:scale-105 transition-transform">
                 PRO
               </div>
@@ -100,7 +100,7 @@ export default async function ProAnalyticsPage(props: {
             </a>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/dashboard" className="hidden md:flex items-center gap-2 mr-4 text-sm font-semibold text-zinc-400 hover:text-white transition-colors">
+            <a href={initialStoreId ? `/dashboard?storeId=${initialStoreId}` : "/dashboard"} className="hidden md:flex items-center gap-2 mr-4 text-sm font-semibold text-zinc-400 hover:text-white transition-colors">
               ← 대시보드로 돌아가기
             </a>
             <AccountSettings email={user.email} />
@@ -110,7 +110,7 @@ export default async function ProAnalyticsPage(props: {
       </header>
 
       <div className="flex-1">
-        <ProAnalyticsViewWrapper initialStoreId={initialStoreId} initialRole={freshRole} isFromHqSelection={!!requestedStoreId} />
+        <ProAnalyticsViewWrapper initialStoreId={initialStoreId} initialRole={freshRole} isFromHqSelection={!!requestedStoreId} userEmail={user.email} isDemoMode={['seoulbowl@naver.com', 'seoulbowl_store@naver.com', 'seoulbowl_solo@naver.com'].includes(user.email || "")} />
       </div>
 
       <Footer />

@@ -12,7 +12,7 @@ export interface UpgradeResult {
   error?: string;
 }
 
-export async function upgradeUserRole(plan: string): Promise<UpgradeResult> {
+export async function upgradeStoreTier(plan: string, storeId: string): Promise<UpgradeResult> {
   const targetRole = plan.toUpperCase() as ValidPlan;
   if (!VALID_PLANS.includes(targetRole)) {
     return { success: false, error: `유효하지 않은 플랜: ${plan}` };
@@ -43,30 +43,29 @@ export async function upgradeUserRole(plan: string): Promise<UpgradeResult> {
 
   // 3. ★ 수파베이스 라이브러리 버리고 Raw Fetch 사용 (오염 원천 차단)
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/user_roles?on_conflict=user_id`, {
-      method: 'POST',
+    const response = await fetch(`${supabaseUrl}/rest/v1/stores?id=eq.${storeId}`, {
+      method: 'PATCH',
       headers: {
         'apikey': serviceRoleKey,
         'Authorization': `Bearer ${serviceRoleKey}`, // 오염된 유저 JWT 대신 완벽한 마스터키 강제 주입
         'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
       },
       body: JSON.stringify({
-        user_id: user.id,
-        role: targetRole,
-        subscription_ends_at: endsAt.toISOString(),
-
+        subscription_tier: targetRole,
+        subscription_expires_at: endsAt.toISOString(),
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[upgradeUserRole] Fetch 실패:", errorText);
+      console.error("[upgradeStoreTier] Fetch 실패:", errorText);
       return { success: false, error: `권한 업데이트 실패 (Fetch): ${response.statusText}` };
     }
 
+    console.log("[upgradeStoreTier] currentStoreId:", storeId, "tier:", targetRole);
+
   } catch (err) {
-    console.error("[upgradeUserRole] Fetch 에러:", err);
+    console.error("[upgradeStoreTier] Fetch 에러:", err);
     return { success: false, error: "서버 통신 중 오류가 발생했습니다." };
   }
 

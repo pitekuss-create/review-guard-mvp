@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { loadPaymentWidget, PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
+import { useStore } from "@/lib/store/useStore";
 
 export default function CheckoutPage() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan");
   const isYearly = searchParams.get("yearly") === "true";
   const router = useRouter();
+  const currentStoreId = useStore((state) => state.currentStoreId);
 
   const [paymentWidget, setPaymentWidget] = useState<PaymentWidgetInstance | null>(null);
   const paymentMethodsWidgetRef = useRef(null);
@@ -56,7 +58,7 @@ export default function CheckoutPage() {
       await paymentWidget.requestPayment({
         orderId: orderId,
         orderName: `ReviewGuard ${plan === 'pro' ? 'Pro' : 'Basic'} 플랜`,
-        successUrl: `${window.location.origin}/payment/success?plan=${plan}`,
+        successUrl: `${window.location.origin}/payment/success?plan=${plan}&storeId=${currentStoreId || ''}`,
         failUrl: `${window.location.origin}/payment/fail`,
         customerEmail: "support@reviewguard.ai",
         customerName: "리뷰가드 사장님",

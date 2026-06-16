@@ -2,7 +2,7 @@
 import { useStore } from "@/lib/store/useStore";
 import { useCallback, useState, useEffect } from "react";
 import { getTrialStatus } from "@/lib/trialUtils";
-import PaywallOverlay from "./PaywallOverlay";
+import PaywallModal from "./PaywallModal";
 
 type AiReplies = {
   friendly: string;
@@ -17,9 +17,8 @@ const TONE_LABELS: { key: keyof AiReplies; label: string; color: string }[] = [
 ];
 
 export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
-  const { userRole } = useStore();
+  const { userRole, accessibleStores, currentStoreId } = useStore();
 
-  // 🚀 [핀셋 수술 1]: 주소창을 먼저 읽어서 결제 즉시 잠금을 푸는 무적 방어막!
   const activeRole = (() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -30,13 +29,31 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
     return (userRole || "FREE").toUpperCase();
   })();
 
-  const isPaidUser = ["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole);
+  const currentStoreData = accessibleStores?.find(s => s.id === currentStoreId);
+  const isHqStore = !!((currentStoreData as any)?.organization_id || (currentStoreData as any)?.is_hq_sponsored);
+
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
+
+  const isPaidUser = !isExpired && (["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore);
   const [reviewText, setReviewText] = useState("");
   const [loading, setLoading] = useState(false);
   const [replies, setReplies] = useState<AiReplies | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [trialExpired, setTrialExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
 
   // Check trial status on mount
   useEffect(() => {
@@ -53,7 +70,13 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
     checkTrial();
   }, []);
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (e?: React.MouseEvent) => {
+    if (isExpired) {
+      if (e) e.preventDefault();
+      setShowPaywallModal(true);
+      return;
+    }
+
     if (!reviewText.trim()) return;
 
     setLoading(true);
@@ -89,11 +112,29 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
       await navigator.clipboard.writeText(text);
       setCopiedKey(uniqueKey);
       setTimeout(() => setCopiedKey(null), 2000);
-      window.open("https://new.smartplace.naver.com/reviews/", "_blank");
+
+      const placeUrl = (currentStoreData as any)?.place_url;
+      const rawUrl = placeUrl;
+      let finalUrl = "https://new.smartplace.naver.com/reviews/"; // 기본값
+
+      if (rawUrl) {
+        // 정규식: place/숫자 또는 restaurant/숫자 형태에서 '숫자'만 완벽하게 추출
+        const match = rawUrl.match(/(?:place|restaurant)\/(\d+)/);
+
+        if (match && match[1]) {
+          const storeIdNum = match[1];
+          finalUrl = `https://m.place.naver.com/restaurant/${storeIdNum}/review/visitor`;
+        } else {
+          // 숫자 추출 실패 시 (단축 URL 등) 원래 주소로 보냄
+          finalUrl = rawUrl;
+        }
+      }
+
+      window.open(finalUrl, "_blank");
     } catch {
       console.error("클립보드 복사 실패");
     }
-  }, []);
+  }, [currentStoreData]);
 
   return (
     <section className="relative rounded-2xl bg-gradient-to-br from-[#1a1d2b] to-[#161822cc] p-6 ring-1 ring-white/[0.06] mb-8">
@@ -101,13 +142,6 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
       <div className="absolute -left-6 -top-6 h-32 w-32 rounded-full bg-violet-500/8 blur-3xl pointer-events-none" />
 
       <div className="relative">
-        {/* 🚀 [핀셋 수술 2]: 돈 낸 유저(!isPaidUser)라면 자물쇠 절대 채우지 마라! */}
-        {(trialExpired && !isPaidUser) && (
-          <PaywallOverlay
-            title="🔒 베이직 플랜 전용 기능"
-            description="14일 무료 체험이 종료되었습니다. 계속해서 고도화 분석 기능을 이용하시려면 베이직 플랜을 구독해 주세요."
-          />
-        )}
         <div className="flex items-center gap-2 mb-1">
           <svg className="h-5 w-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -139,7 +173,7 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
         <button
           type="button"
           disabled={loading || !reviewText.trim()}
-          onClick={() => void handleGenerate()}
+          onClick={(e) => void handleGenerate(e)}
           className="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-6 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
         >
           {loading ? (
@@ -206,6 +240,18 @@ export default function ManualReplyGenerator({ storeId }: { storeId: string }) {
           </div>
         )}
       </div>
+
+      {showPaywallModal && (
+        <PaywallModal
+          isOpen={showPaywallModal}
+          onClose={() => setShowPaywallModal(false)}
+          title={isHqStore ? "🔒 통합 결제 만료" : "🔒 결제 필요"}
+          message={isHqStore
+            ? "프랜차이즈 통합 결제가 만료되었습니다. 본사 담당자에게 문의해 주세요."
+            : "베이직 플랜 전용 기능입니다. 업그레이드하고 모든 기능을 사용해보세요."}
+          isHq={isHqStore}
+        />
+      )}
     </section>
   );
 }

@@ -35,7 +35,16 @@ export default function OnboardingPage() {
     name: "", business_number: "", operation_report_number: "", hq_access_consent: false,
   });
 
-  const token = searchParams.get("token") ?? null;
+  const [token, setToken] = useState<string | null>(searchParams.get("token"));
+
+  useEffect(() => {
+    const urlToken = searchParams.get("token");
+    const sessionToken = sessionStorage.getItem("hq_invite_token");
+    const foundToken = urlToken || sessionToken || null;
+    if (foundToken) {
+      setToken(foundToken);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -56,7 +65,7 @@ export default function OnboardingPage() {
 
       const userId = session.user.id;
       const urlParams = new URLSearchParams(window.location.search);
-      const currentToken = urlParams.get("token") || null;
+      const currentToken = urlParams.get("token") || sessionStorage.getItem("hq_invite_token") || null;
 
       let hqOrgId: string | null = null;
       let isHqSponsored = false;
@@ -94,11 +103,13 @@ export default function OnboardingPage() {
       const userRole = roleRow?.role ?? null;
       const newStoreId = newStore?.id;
 
+      sessionStorage.removeItem("hq_invite_token");
+
       setStep("done");
 
       if (userRole === "HQ_ADMIN") { router.replace("/hq/dashboard"); return; }
-      if (isHqSponsored) { router.replace(`/dashboard?storeId=${newStoreId}`); return; }
-      router.replace("/pricing");
+      router.replace(`/dashboard?storeId=${newStoreId}`);
+      return;
 
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.");

@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { getTrialStatus } from "@/lib/trialUtils";
 import { useStore } from "@/lib/store/useStore";
-import PaywallOverlay from "./PaywallOverlay";
+import PaywallModal from "./PaywallModal";
 
 export default function KeywordManager() {
-  const { currentStoreId, userRole } = useStore();
+  const { currentStoreId, userRole, accessibleStores } = useStore();
 
-  // 🚀 [핀셋 수술 1]: 주소창을 먼저 읽어서 결제 즉시 잠금을 푸는 무적 방어막!
   const activeRole = (() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -19,14 +18,32 @@ export default function KeywordManager() {
     return (userRole || "FREE").toUpperCase();
   })();
 
+  const currentStoreData = accessibleStores?.find(s => s.id === currentStoreId);
+  const isHqStore = !!((currentStoreData as any)?.organization_id || (currentStoreData as any)?.is_hq_sponsored);
+
+  let isExpired = false;
+  if (currentStoreData) {
+    const now = new Date();
+    if ((currentStoreData as any).trial_start_date) {
+      const trialEnd = new Date((currentStoreData as any).trial_start_date);
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      if (trialEnd < now) isExpired = true;
+    }
+    if ((currentStoreData as any).subscription_expires_at) {
+      const expiry = new Date((currentStoreData as any).subscription_expires_at);
+      isExpired = expiry < now;
+    }
+  }
+
   // 돈 낸 유저인지 판별
-  const isPaidUser = ["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole);
+  const isPaidUser = !isExpired && (["BASIC", "PRO", "ENTERPRISE", "HQ_ADMIN", "SUPER_ADMIN"].includes(activeRole) || isHqStore);
 
   const [concept, setConcept] = useState("");
   const [saved, setSaved] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
 
   /* 데이터 추출을 위한 State */
   const [storeName, setStoreName] = useState("");
@@ -46,6 +63,11 @@ export default function KeywordManager() {
         const res = await fetch(url);
 
         if (!res.ok) {
+          if (res.status === 404) {
+            console.warn(`[MVP] Keyword API not yet implemented (404) for ${url}. Using default state.`);
+            // 빈 상태로 유지하여 화면에 지장 없게 처리
+            return;
+          }
           console.error(`API Error: ${res.status} ${res.statusText}`);
           return;
         }
@@ -83,6 +105,7 @@ export default function KeywordManager() {
 
   /* ── 통합 저장 (키워드 + 매장 컨텍스트) ── */
   const handleSave = useCallback(async (keywordsToSave: string = concept, currentName: string = storeName) => {
+
     setSaving(true);
     try {
       const res = await fetch("/api/keywords", {
@@ -117,6 +140,7 @@ export default function KeywordManager() {
 
   /* ── 데이터 기반 타겟 키워드 추출 ── */
   const handleExtract = useCallback(async () => {
+
     const trimmedName = storeName.trim();
     if (!trimmedName) {
       alert("매장 상호명을 입력해 주세요.");
@@ -188,13 +212,6 @@ export default function KeywordManager() {
           <>
             {/* ---- [Group A] Keyword Settings ---- */}
             <div className="mb-8 rounded-xl bg-violet-500/5 p-5 ring-1 ring-violet-500/20 space-y-5 relative">
-              {/* 🚀 [핀셋 수술 3]: 14일이 지났더라도, 결제를 한 유저(!isPaidUser)라면 절대 자물쇠를 채우지 마라! */}
-              {(trialExpired && !isPaidUser) && (
-                <PaywallOverlay
-                  title="🔒 베이직 플랜 전용 기능"
-                  description="14일 무료 체험이 종료되었습니다. 계속해서 고도화 분석 기능을 이용하시려면 베이직 플랜을 구독해 주세요."
-                />
-              )}
               <label className="flex items-center gap-1.5 text-xs font-semibold text-violet-300">
                 <span>✨</span> 데이터 기반 타겟 키워드 추출 및 설정
               </label>
@@ -212,7 +229,7 @@ export default function KeywordManager() {
                 <button
                   type="button"
                   disabled={extracting || !storeName.trim()}
-                  onClick={() => void handleExtract()}
+                  onClick={(e) => { if (isExpired) { e.preventDefault(); setShowPaywallModal(true); return; } handleExtract(); }}
                   className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white shadow-md shadow-violet-600/20 transition hover:bg-violet-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none whitespace-nowrap"
                 >
                   {extracting ? (
@@ -249,7 +266,7 @@ export default function KeywordManager() {
                 <button
                   type="button"
                   disabled={saving || !isDirty}
-                  onClick={() => void handleSave()}
+                  onClick={(e) => { if (isExpired) { e.preventDefault(); setShowPaywallModal(true); return; } handleSave(); }}
                   className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   {saving && isDirty ? (
@@ -297,6 +314,18 @@ export default function KeywordManager() {
             {toast}
           </div>
         </div>
+      )}
+
+      {showPaywallModal && (
+        <PaywallModal 
+          isOpen={showPaywallModal} 
+          onClose={() => setShowPaywallModal(false)}
+          title={isHqStore ? "🔒 통합 결제 만료" : "🔒 결제 필요"}
+          message={isHqStore 
+            ? "프랜차이즈 통합 결제가 만료되었습니다. 본사 담당자에게 문의해 주세요." 
+            : "베이직 플랜 전용 기능입니다. 업그레이드하고 모든 기능을 사용해보세요."}
+          isHq={isHqStore}
+        />
       )}
     </section>
   );

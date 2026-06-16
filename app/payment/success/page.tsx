@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { upgradeUserRole } from "./actions";
+import { upgradeStoreTier } from "./actions";
 
 type Status = "processing" | "success" | "error";
 
 export default function PaymentSuccessPage() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") ?? "";
+  const storeId = searchParams.get("storeId") ?? "";
   const processed = useRef(false);
 
   const [status, setStatus] = useState<Status>("processing");
@@ -20,7 +21,13 @@ export default function PaymentSuccessPage() {
 
     const finalizePayment = async () => {
       try {
-        const result = await upgradeUserRole(plan);
+        if (!storeId) {
+          setErrorMsg("매장 ID를 찾을 수 없습니다.");
+          setStatus("error");
+          return;
+        }
+
+        const result = await upgradeStoreTier(plan, storeId);
 
         if (!result.success) {
           console.error("[PaymentSuccess] 권한 업그레이드 실패:", result.error);

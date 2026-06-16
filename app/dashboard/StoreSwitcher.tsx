@@ -37,7 +37,9 @@ export default function StoreSwitcher() {
         setUserInfo({
           role: data.role,
           orgId: data.organization_id,
-          stores: data.stores
+          organization: data.organization,
+          stores: data.stores,
+          email: data.email
         });
       }
     } catch (err) {

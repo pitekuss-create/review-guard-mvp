@@ -33,7 +33,7 @@ export default async function HQDashboardPage() {
   const userRole = roleData?.role || 'STORE_OWNER';
 
   // 본사 권한이 아니면 일반 대시보드로 쫓아냄
-  if (userRole !== 'hq' && userRole !== 'HQ_ADMIN' && userRole !== 'SUPER_ADMIN') {
+  if (userRole !== 'HQ_ADMIN' && userRole !== 'SUPER_ADMIN') {
     redirect("/dashboard");
   }
 
@@ -66,11 +66,11 @@ export default async function HQDashboardPage() {
         </div>
 
         {/* 본사 전용 통합 뷰 컴포넌트 */}
-        <HQOverview />
+        <HQOverview userEmail={user.email} isDemoMode={['seoulbowl@naver.com', 'seoulbowl_store@naver.com', 'seoulbowl_solo@naver.com'].includes(user.email || "")} />
 
         {/* 🚀 바로 이곳입니다! 기존 HQOverview 아래, Footer 위에 추가되었습니다. */}
         <div className="mt-12">
-          <CompetitorXRay />
+          <CompetitorXRay isDemoMode={['seoulbowl@naver.com', 'seoulbowl_store@naver.com', 'seoulbowl_solo@naver.com'].includes(user.email || "")} />
         </div>
       </main>
 

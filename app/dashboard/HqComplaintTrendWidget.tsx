@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { AlertCircle, Clock, AlertTriangle } from "lucide-react";
+import { AlertCircle, Clock, AlertTriangle, Sparkles } from "lucide-react";
+import PremiumEmptyState from "./PremiumEmptyState";
 
 interface KeywordData {
   word: string;
@@ -19,12 +20,39 @@ interface RedZoneStore {
 
 const PIE_COLORS = ["#f43f5e", "#fb923c", "#facc15", "#34d399", "#3b82f6"];
 
-export default function HqComplaintTrendWidget() {
+const DEMO_KEYWORDS = [
+  { word: "대기시간", count: 42 },
+  { word: "주차장", count: 28 },
+  { word: "음식 온도", count: 19 },
+  { word: "직원 응대", count: 14 },
+  { word: "화장실 위생", count: 8 },
+];
+
+const DEMO_RED_ZONE: RedZoneStore[] = [
+  { id: "demo-2", name: "콤파스커피 창원점", complaintCount: 15, avgSentiment: 0, lastComplaintDate: new Date(Date.now() - 1000 * 60 * 15).toISOString(), topKeyword: "대기시간" },
+  { id: "demo-3", name: "콤파스커피 진해점", complaintCount: 8, avgSentiment: 0, lastComplaintDate: new Date(Date.now() - 1000 * 60 * 120).toISOString(), topKeyword: "주차장" },
+  { id: "demo-5", name: "콤파스커피 상남점", complaintCount: 5, avgSentiment: 0, lastComplaintDate: new Date(Date.now() - 1000 * 60 * 240).toISOString(), topKeyword: "음식 온도" },
+];
+
+export default function HqComplaintTrendWidget({ 
+  isDemoMode, 
+  hasReviews = false 
+}: { 
+  isDemoMode?: boolean; 
+  hasReviews?: boolean; 
+}) {
   const [keywords, setKeywords] = useState<KeywordData[]>([]);
   const [redZoneStores, setRedZoneStores] = useState<RedZoneStore[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (isDemoMode) {
+      setKeywords(DEMO_KEYWORDS);
+      setRedZoneStores(DEMO_RED_ZONE);
+      setIsLoading(false);
+      return;
+    }
+
     async function fetchData() {
       try {
         const res = await fetch("/api/hq/complaints");
@@ -39,7 +67,7 @@ export default function HqComplaintTrendWidget() {
       }
     }
     fetchData();
-  }, []);
+  }, [isDemoMode]);
 
   if (isLoading) {
     return (
@@ -49,7 +77,6 @@ export default function HqComplaintTrendWidget() {
     );
   }
 
-  // 시간 경과 포맷팅 함수
   const timeAgo = (dateStr: string) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const diffMins = Math.round(diffMs / 60000);
@@ -73,9 +100,17 @@ export default function HqComplaintTrendWidget() {
           <p className="text-xs text-zinc-400 mb-6 font-medium">전국 가맹점에서 가장 빈번하게 발생하는 불만 요인을 취합한 통합 지표입니다.</p>
           
           {keywords.length === 0 ? (
-            <div className="flex items-center justify-center h-[200px] text-zinc-500 text-sm border border-dashed border-white/10 rounded-xl">
-              아직 집계된 데이터가 없습니다.
-            </div>
+            hasReviews ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-[#102a1e]/40 rounded-2xl border border-dashed border-emerald-800/60 p-6 min-h-[220px]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mb-3 animate-bounce">
+                  <Sparkles size={24} />
+                </div>
+                <p className="text-sm font-bold text-emerald-400">🎉 현재 접수된 불만(악플)이 0건입니다! (최상 상태)</p>
+                <p className="text-xs text-zinc-400 mt-1">완벽합니다! 우수한 브랜드 평판을 계속 유지해주세요.</p>
+              </div>
+            ) : (
+              <PremiumEmptyState message="아직 수집된 데이터가 없습니다. 첫 QR 리뷰를 받아보세요!" />
+            )
           ) : (
             <div className="flex flex-col sm:flex-row items-center gap-6">
               <div className="h-[220px] w-full sm:w-[220px] flex-shrink-0">
@@ -118,12 +153,20 @@ export default function HqComplaintTrendWidget() {
             </div>
             <span className="rounded-full bg-rose-500/10 px-2.5 py-1 text-[10px] font-black text-rose-400 ring-1 ring-rose-500/30 animate-pulse tracking-widest">RED ZONE</span>
           </div>
-          <p className="text-xs text-zinc-400 mb-6 font-medium">최근 고객 불만 접수량이 급증하여 본사의 즉각적인 개입이 필요한 상위 3개 지점입니다.</p>
+          <p className="text-xs text-zinc-400 mb-6 font-medium">최근 고객 불만 접수량이 급급하여 본사의 즉각적인 개입이 필요한 상위 3개 지점입니다.</p>
 
           {redZoneStores.length === 0 ? (
-            <div className="flex items-center justify-center h-[200px] text-zinc-500 text-sm border border-dashed border-white/10 rounded-xl">
-              위험 지점이 없습니다.
-            </div>
+            hasReviews ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-[#102a1e]/40 rounded-2xl border border-dashed border-emerald-800/60 p-6 min-h-[220px]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mb-3 animate-pulse">
+                  <span>💚</span>
+                </div>
+                <p className="text-sm font-bold text-emerald-400">모든 지점이 안전 구역에 있습니다.</p>
+                <p className="text-xs text-zinc-400 mt-1">경보 수준의 리스크를 가진 가맹점이 존재하지 않습니다.</p>
+              </div>
+            ) : (
+              <PremiumEmptyState message="아직 수집된 데이터가 없습니다. 첫 QR 리뷰를 받아보세요!" />
+            )
           ) : (
             <div className="space-y-4">
               {redZoneStores.map((store, i) => (

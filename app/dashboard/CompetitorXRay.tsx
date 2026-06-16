@@ -26,7 +26,7 @@ function getVolumeBadgeStyle(volume: number) {
     return { bg: "bg-zinc-500/10", text: "text-zinc-400", ring: "ring-zinc-500/20" };
 }
 
-export default function CompetitorXRay() {
+export default function CompetitorXRay({ isDemoMode }: { isDemoMode?: boolean }) {
     const [region, setRegion] = useState("");
     const [storeName, setStoreName] = useState("");
     const [menu, setMenu] = useState("");

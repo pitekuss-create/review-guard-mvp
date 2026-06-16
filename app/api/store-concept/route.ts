@@ -65,6 +65,20 @@ export async function PATCH(req: NextRequest) {
     const concept = typeof body.concept === "string" ? body.concept.trim() : "";
     const placeUrl = typeof body.placeUrl === "string" ? body.placeUrl.trim() : undefined;
 
+    let resolvedPlaceUrl = placeUrl;
+    if (placeUrl && placeUrl.includes("naver.me")) {
+      try {
+        const response = await fetch(placeUrl, { method: 'GET', redirect: 'follow' });
+        const resolvedUrl = response.url;
+        const match = resolvedUrl.match(/(?:place|restaurant)\/(\d+)/);
+        if (match && match[1]) {
+          resolvedPlaceUrl = `https://m.place.naver.com/restaurant/${match[1]}/home`;
+        }
+      } catch (err) {
+        console.error("[PATCH /api/store-concept] Short URL resolution failed:", err);
+      }
+    }
+
     if (!storeId) {
       return NextResponse.json({ error: "storeId is required" }, { status: 400 });
     }
@@ -80,11 +94,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Store not found for this user" }, { status: 404 });
     }
 
-    console.log("[PATCH /api/store-concept] Updating store:", store.id, { concept, placeUrl });
+    console.log("[PATCH /api/store-concept] Updating store:", store.id, { concept, placeUrl: resolvedPlaceUrl });
 
     const updateData: Record<string, any> = { concept };
-    if (placeUrl !== undefined) {
-      updateData.place_url = placeUrl;
+    if (resolvedPlaceUrl !== undefined) {
+      updateData.place_url = resolvedPlaceUrl;
     }
 
     const { error } = await supabase

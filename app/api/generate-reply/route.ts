@@ -15,23 +15,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // [Billing Lock] 트라이얼 기간(14일) 체크
+    // [Billing Lock] 요금제 및 본사 지원 검증
     const { data: store } = await supabase
       .from("stores")
-      .select("trial_start_date")
+      .select("trial_start_date, subscription_tier, is_hq_sponsored")
       .eq("user_id", user.id)
+      .limit(1)
       .single();
 
-    if (store?.trial_start_date) {
-      const trialStart = new Date(store.trial_start_date);
-      const now = new Date();
-      const diffInDays = (now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24);
+    if (store && !store.is_hq_sponsored && store.subscription_tier === "FREE") {
+      if (store.trial_start_date) {
+        const trialStart = new Date(store.trial_start_date);
+        const now = new Date();
+        const diffInDays = (now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24);
 
-      if (diffInDays > 14) {
-        return NextResponse.json(
-          { error: "무료 체험 기간이 만료되었습니다. 플랜을 업그레이드하세요." },
-          { status: 403 }
-        );
+        if (diffInDays > 14) {
+          return NextResponse.json(
+            { error: "무료 체험 기간이 만료되었습니다. 플랜을 업그레이드하세요." },
+            { status: 403 }
+          );
+        }
       }
     }
 

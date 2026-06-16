@@ -9,6 +9,7 @@ interface PaywallModalProps {
   title?: string;
   message?: string;
   price?: string;
+  isHq?: boolean;
 }
 
 export default function PaywallModal({
@@ -16,7 +17,8 @@ export default function PaywallModal({
   onClose,
   title = "베이직 플랜 기능",
   message = "해당 기능은 베이직 플랜 구독 시 이용 가능합니다.",
-  price = "월 30,000원",
+  price = "월 29,000원",
+  isHq = false,
 }: PaywallModalProps) {
   const router = useRouter(); // 🚀 추가: 라우터 훅
 
@@ -69,16 +71,18 @@ export default function PaywallModal({
 
         {/* Buttons */}
         <div className="flex flex-col gap-3 mt-2">
-          <button
-            type="button"
-            onClick={() => {
-              // 🚀 수정: 더 이상 alert 팝업 안 띄우고 페이지 이동
-              router.push("/pricing");
-            }}
-            className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-orange-400 active:scale-[0.98]"
-          >
-            결제하고 잠금 해제하기
-          </button>
+          {!isHq && (
+            <button
+              type="button"
+              onClick={() => {
+                // 🚀 수정: 더 이상 alert 팝업 안 띄우고 페이지 이동
+                router.push("/pricing");
+              }}
+              className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-orange-400 active:scale-[0.98]"
+            >
+              결제하고 잠금 해제하기
+            </button>
+          )}
 
           <button
             type="button"

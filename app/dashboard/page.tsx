@@ -8,7 +8,6 @@ import LogoutButton from "./LogoutButton";
 import AccountSettings from "./AccountSettings";
 import Footer from "@/app/components/Footer";
 import PaymentSuccessToast from "./PaymentSuccessToast";
-import TimeMachineController from "./TimeMachineController";
 import RoiModal from "./RoiModal";
 import ExpirationBanner from "./ExpirationBanner";
 
@@ -18,6 +17,8 @@ export const metadata: Metadata = {
   title: "사장님 통합 대시보드 — ReviewGuard",
   description: "매장 리뷰 현황을 한눈에 확인하세요.",
 };
+
+const DEMO_EMAILS = ['seoulbowl@naver.com', 'seoulbowl_store@naver.com', 'seoulbowl_solo@naver.com'];
 
 export default async function DashboardPage(props: {
   searchParams: Promise<{ storeId?: string; payment_success?: string; plan?: string }>;
@@ -83,10 +84,11 @@ export default async function DashboardPage(props: {
     redirect("/onboarding");
   }
 
+  const isDemoMode = DEMO_EMAILS.includes(user.email || "");
+
   return (
     <div className="min-h-dvh bg-[#0f1117] text-zinc-100">
       <ExpirationBanner />
-      <TimeMachineController />
       <PaymentSuccessToast />
       <RoiModal />
 
@@ -102,7 +104,7 @@ export default async function DashboardPage(props: {
               </span>
             </div>
             <StoreSwitcher />
-            <a href="/dashboard/pro-analytics" className="hidden lg:flex items-center gap-2 rounded-lg bg-gradient-to-r from-fuchsia-600/10 to-indigo-600/10 px-3 py-2 text-sm font-bold text-fuchsia-400 hover:bg-white/10 hover:text-fuchsia-300 ring-1 ring-fuchsia-500/30 transition-all group shadow-sm shadow-fuchsia-500/10">
+            <a href={initialStoreId ? `/dashboard/pro-analytics?storeId=${initialStoreId}` : "/dashboard/pro-analytics"} className="hidden lg:flex items-center gap-2 rounded-lg bg-gradient-to-r from-fuchsia-600/10 to-indigo-600/10 px-3 py-2 text-sm font-bold text-fuchsia-400 hover:bg-white/10 hover:text-fuchsia-300 ring-1 ring-fuchsia-500/30 transition-all group shadow-sm shadow-fuchsia-500/10">
               <span className="group-hover:scale-110 transition-transform">👑</span>
               성장 데이터 분석 <span className="ml-1 text-[10px] bg-fuchsia-500/20 px-1.5 py-0.5 rounded text-fuchsia-300 border border-fuchsia-500/30">PRO</span>
             </a>
@@ -121,7 +123,7 @@ export default async function DashboardPage(props: {
       </header>
 
       {/* 🚀 방금 원본 DB에서 건져 올린 '진짜 권한'을 프론트엔드로 전달 */}
-      <DashboardViewWrapper initialStoreId={initialStoreId} initialRole={freshRole} isFromHqSelection={!!requestedStoreId} />
+      <DashboardViewWrapper initialStoreId={initialStoreId} initialRole={freshRole} isFromHqSelection={!!requestedStoreId} isDemoMode={isDemoMode} />
 
       <Footer />
     </div>

@@ -14,108 +14,197 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 🚀 로컬 폴백 상태 추가
+  const [fallbackUserRole, setFallbackUserRole] = useState<string | null>(null);
+  const [fallbackContractEndDate, setFallbackContractEndDate] = useState<string | null>(null);
+  const [lastFetchedStoreId, setLastFetchedStoreId] = useState<string | null>(null);
+
   // 🚀 유저 권한 및 현재 매장 정보 가져오기
-  const { userRole, currentStoreId, accessibleStores } = useStore();
-  const activeRole = (userRole || "FREE").toUpperCase();
+  const { userRole, currentStoreId, accessibleStores, organizationId, organization } = useStore();
+  const activeRole = (userRole || fallbackUserRole || "FREE").toUpperCase();
 
   // 🚀 프랜차이즈 소속 매장인지 확인하는 로직 추가!
   const currentStoreData = accessibleStores?.find(s => s.id === currentStoreId);
   // 타입 에러 우회를 위해 as any 사용 (빨간줄 해결)
-  const isHqStore = !!(currentStoreData as any)?.organization_id;
+  const [isHqSponsoredFromDb, setIsHqSponsoredFromDb] = useState(false);
+  const isHqStore = !!(currentStoreData as any)?.organization_id || isHqSponsoredFromDb;
 
   const isHqAdmin = activeRole === "HQ_ADMIN" || activeRole === "SUPER_ADMIN";
   // startswith 오타 대문자 W로 수정 완료
   const isHq = pathname?.startsWith('/hq') || false;
 
   // [DO NOT REMOVE] HQ 강제 렌더링 오버라이드 (삭제 금지)
+  const storeTier = (currentStoreData as any)?.subscription_tier;
+
   const displayRoleName =
     isHq ? "Enterprise (본사 전용 플랜)" :
       isHqAdmin ? "Enterprise (본사 전용 플랜)" :
         isHqStore ? "💎 PRO (프랜차이즈 혜택)" :
-          activeRole === "ENTERPRISE" ? "엔터프라이즈 플랜" :
-            activeRole === "PRO" ? "PRO 플랜" :
-              activeRole === "BASIC" ? "베이직 플랜" :
+          storeTier === "ENTERPRISE" ? "엔터프라이즈 플랜 (ENTERPRISE)" :
+            storeTier === "PRO" ? "PRO 플랜 (PRO)" :
+              storeTier === "BASIC" ? "베이직 플랜 (BASIC)" :
                 "무료 체험 플랜 (FREE)";
   // [DO NOT REMOVE] HQ 강제 렌더링 오버라이드 (삭제 금지)
 
   // 프랜차이즈 혜택이거나 유료 결제자면 보라색 프리미엄 뱃지 적용
-  const isPremiumBadge = isHqStore || activeRole !== "FREE";
+  const isPremiumBadge = isHqStore || (storeTier === "BASIC" || storeTier === "PRO" || storeTier === "ENTERPRISE");
 
   const [isOpen, setIsOpen] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   
-  // 🚀 실제 DB의 구독 만료일 가져오기
-  const [subscriptionEndsAt, setSubscriptionEndsAt] = useState<string | null>(null);
-  const [timeMachineDate, setTimeMachineDate] = useState<string | null>(null);
+  // 🚀 비밀번호 변경 관련 상태 추가
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    const fetchSubscriptionData = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // 1. 기본 구독 정보 가져오기
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("subscription_ends_at")
-          .eq("user_id", user.id)
-          .single();
-          
-        if (roleData?.subscription_ends_at) {
-          setSubscriptionEndsAt(roleData.subscription_ends_at);
+    // 만약 이미 해당 매장의 정보를 가져왔다면 중복 호출 방지
+    if (currentStoreId && currentStoreId === lastFetchedStoreId) return;
+
+    const fetchContractFallback = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        if (currentStoreId) {
+          setLastFetchedStoreId(currentStoreId);
         }
 
-        // 2. 타임머신 테스트를 위한 매장별 trial_start_date 가져오기
-        if (currentStoreId) {
-          const { data: storeData } = await supabase
-            .from("stores")
-            .select("trial_start_date")
-            .eq("id", currentStoreId)
-            .single();
-          
-          if (storeData?.trial_start_date) {
-            const trialStart = new Date(storeData.trial_start_date);
-            const trialEnd = new Date(trialStart);
-            trialEnd.setDate(trialEnd.getDate() + 14); // 14일 무료체험 만료일
-            setTimeMachineDate(trialEnd.toISOString());
+        // 1. 공통: user_roles & organizations 정보 조회 시도
+        const { data: roleData, error: roleError } = await supabase
+          .from('user_roles')
+          .select('role, organizations(contract_end_date)')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!roleError && roleData) {
+          if (roleData.role) {
+            setFallbackUserRole(roleData.role);
+          }
+          if (roleData.organizations) {
+            const orgData = roleData.organizations as any;
+            if (orgData.contract_end_date) {
+              setFallbackContractEndDate(orgData.contract_end_date);
+              return;
+            }
           }
         }
+
+        // 2. 가맹점(Store Owner) & 본사 대납(is_hq_sponsored === true) 상태인 경우 직접 organizations 조회
+        const storeOrgId = (currentStoreData as any)?.organization_id;
+        const isStoreHqSponsored = !!(currentStoreData as any)?.is_hq_sponsored;
+
+        if (isStoreHqSponsored && storeOrgId) {
+          const { data: orgData, error: orgError } = await supabase
+            .from('organizations')
+            .select('contract_end_date')
+            .eq('id', storeOrgId)
+            .single();
+
+          if (!orgError && orgData?.contract_end_date) {
+            setFallbackContractEndDate(orgData.contract_end_date);
+          }
+        } else {
+          // 본사 대납이 아니면 폴백 날짜 초기화
+          setFallbackContractEndDate(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch contract end date fallback:", err);
       }
     };
-    
-    if (isOpen) {
-      fetchSubscriptionData();
-    }
-  }, [isOpen, currentStoreId]);
 
+    const isStoreHqSponsored = !!(currentStoreData as any)?.is_hq_sponsored;
+    const hasNoContractDate = !organization?.contract_end_date && !fallbackContractEndDate;
+
+    if (userRole === "HQ_ADMIN" || hasNoContractDate || isStoreHqSponsored) {
+      fetchContractFallback();
+    }
+  }, [userRole, organization?.contract_end_date, currentStoreId, currentStoreData, fallbackContractEndDate, lastFetchedStoreId]);
+
+  const contractEndDate = fallbackContractEndDate || organization?.contract_end_date || null;
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+  
   let planDateText = "로딩 중...";
-  
-  // 🚀 핵심: 타임머신 날짜가 존재하면 DB 값을 무시하고 우선 적용
-  const displayEndsAt = timeMachineDate || subscriptionEndsAt;
-  
-  if (displayEndsAt) {
-    const ends = new Date(displayEndsAt);
+  let endsAt: string | null = null;
+  const isPaid = storeTier === "BASIC" || storeTier === "PRO" || storeTier === "ENTERPRISE";
+  const isHqSponsored = !!(currentStoreData as any)?.is_hq_sponsored;
+
+  if (isHq || isHqAdmin) {
+    endsAt = contractEndDate;
+  } else if (isHqSponsored) {
+    endsAt = contractEndDate;
+  } else if (isHqStore) {
+    endsAt = (currentStoreData as any)?.subscription_expires_at || null;
+  } else if (isPaid) {
+    endsAt = (currentStoreData as any)?.subscription_expires_at;
+  } else {
+    const trialStart = (currentStoreData as any)?.trial_start_date;
+    if (trialStart) {
+      const trialEndDate = new Date(trialStart);
+      trialEndDate.setDate(trialEndDate.getDate() + 14);
+      endsAt = trialEndDate.toISOString();
+    }
+  }
+
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "기한 없음";
+    // DB의 UTC 시간(+00:00)이 한국 시간으로 변환되면서 하루 밀리는 현상을 방지하기 위해
+    // YYYY-MM-DD 형태의 날짜 부분만 잘라서 출력
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}년 ${match[2]}월 ${match[3]}일`;
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "기한 없음";
+    return `${d.getFullYear()}년 ${String(d.getMonth() + 1).padStart(2, '0')}월 ${String(d.getDate()).padStart(2, '0')}일`;
+  };
+
+  const parseLocalDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return new Date();
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      // 타임존 오프셋 이슈 차단을 위해 YYYY-MM-DD를 기준으로 해당 일의 23시 59분 59초로 로컬 생성
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+    }
+    return new Date(dateStr);
+  };
+
+  if (endsAt) {
+    const ends = parseLocalDate(endsAt);
     const now = new Date();
     const diffDays = Math.ceil((ends.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    const formattedDate = `${ends.getFullYear()}. ${String(ends.getMonth() + 1).padStart(2, '0')}. ${String(ends.getDate()).padStart(2, '0')}`;
+    const formattedDate = formatDate(endsAt);
     const dDayText = diffDays > 0 ? `D-${diffDays}` : diffDays === 0 ? "D-Day" : `만료됨`;
-    
-    if (isHq || isHqAdmin || activeRole === "ENTERPRISE") {
+
+    if (isHq || isHqAdmin || storeTier === "ENTERPRISE") {
       planDateText = `🔄 다음 계약 갱신일: ${formattedDate} (${dDayText})`;
     } else if (isHqStore) {
-      planDateText = "🏢 본사 통합 결제 (자동 연장)";
-    } else if (activeRole === "BASIC" || activeRole === "PRO") {
+      planDateText = `🏢 본사 통합 결제 (만료일: ${formattedDate})`;
+    } else if (storeTier === "BASIC" || storeTier === "PRO") {
       planDateText = `💳 다음 결제일: ${formattedDate} (${dDayText})`;
     } else {
       planDateText = `⏳ 무료 체험 종료일: ${formattedDate} (${dDayText})`;
     }
-  } else if (!isOpen) {
-    planDateText = "클릭하여 정보 확인";
   } else {
-    // DB에 날짜가 없을 때의 fallback
-    planDateText = isHqStore ? "🏢 본사 통합 결제 (자동 연장)" : "만료일 정보 없음";
+    // endsAt이 없는 경우
+    if (isHq || isHqAdmin || storeTier === "ENTERPRISE") {
+      planDateText = "🔄 다음 계약 갱신일: 무제한";
+    } else if (isHqStore) {
+      planDateText = "🏢 본사 통합 결제 (기한 없음)";
+    } else if (isPaid) {
+      planDateText = "💳 다음 결제일: 무제한";
+    } else {
+      planDateText = "⏳ 무료 체험 종료일: 기한 없음";
+    }
   }
 
   const handleClose = () => {
@@ -123,6 +212,9 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
     setTimeout(() => {
       setDeleteMode(false);
       setDeleteConfirmText("");
+      setIsPasswordOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
     }, 300);
   };
 
@@ -148,6 +240,38 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
     }
   };
 
+  const handlePasswordChange = async () => {
+    if (newPassword.length < 6) {
+      showToast("비밀번호는 최소 6자리 이상이어야 합니다.", "error");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast("새 비밀번호와 비밀번호 확인이 일치하지 않습니다.", "error");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        showToast(error.message, "error");
+      } else {
+        showToast("비밀번호가 성공적으로 변경되었습니다.", "success");
+        setNewPassword("");
+        setConfirmPassword("");
+        setIsPasswordOpen(false);
+      }
+    } catch (err: any) {
+      showToast("비밀번호 변경 중 오류가 발생했습니다.", "error");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   return (
     <div className="relative">
       <button
@@ -164,7 +288,7 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute right-0 top-full mt-2 w-[320px] z-50 overflow-hidden rounded-2xl bg-[#1a1d2d] ring-1 ring-white/10 shadow-2xl animate-[fadeSlideDown_0.2s_ease-out]">
+          <div className="absolute right-0 top-full mt-2 w-[320px] z-50 max-h-[85vh] overflow-y-auto rounded-2xl bg-[#1a1d2d] ring-1 ring-white/10 shadow-2xl animate-[fadeSlideDown_0.2s_ease-out]">
             <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
               <h3 className="font-bold text-sm text-white">
                 {deleteMode ? "계정 탈퇴" : "설정 및 내 정보"}
@@ -218,6 +342,58 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
                         <svg className="h-3 w-3 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                       </button>
                     )}
+
+                    {/* 🔒 비밀번호 변경 아코디언 */}
+                    <div className="border border-white/5 rounded-xl bg-white/5 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsPasswordOpen(!isPasswordOpen)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-200 transition-colors hover:bg-white/10 active:scale-95"
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>비밀번호 변경</span>
+                        </span>
+                        <svg className={`h-3 w-3 text-zinc-500 transition-transform duration-200 ${isPasswordOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+
+                      {isPasswordOpen && (
+                        <div className="px-4 pb-4 pt-2 border-t border-white/5 flex flex-col gap-3 animate-[fadeSlideDown_0.2s_ease-out]">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-zinc-400 mb-1">새 비밀번호</label>
+                            <input
+                              type="password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="새 비밀번호 (6자리 이상)"
+                              className="w-full rounded-lg bg-[#141622] border border-white/10 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:ring-2 focus:ring-teal-500/30"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-zinc-400 mb-1">새 비밀번호 확인</label>
+                            <input
+                              type="password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              placeholder="새 비밀번호 확인"
+                              className="w-full rounded-lg bg-[#141622] border border-white/10 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:ring-2 focus:ring-teal-500/30"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handlePasswordChange}
+                            disabled={isUpdatingPassword}
+                            className="w-full rounded-lg bg-teal-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-teal-600/20 transition-all hover:bg-teal-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {isUpdatingPassword ? "변경 중..." : "변경 완료"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-auto flex justify-end">
@@ -255,6 +431,16 @@ export default function AccountSettings({ email }: AccountSettingsProps) {
             </div>
           </div>
         </>
+      )}
+
+      {/* 🚀 토스트 피드백 */}
+      {toast && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[1000] animate-[toastSlideUp_0.4s_ease-out]">
+          <div className={`${toast.type === 'error' ? 'bg-rose-600/95 ring-rose-500/30' : 'bg-emerald-600/95 ring-emerald-500/30'} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-2 font-bold whitespace-nowrap ring-1`}>
+            <span>{toast.type === 'error' ? '❌' : '✅'}</span>
+            {toast.message}
+          </div>
+        </div>
       )}
     </div>
   );

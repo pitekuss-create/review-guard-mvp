@@ -145,13 +145,27 @@ function ReviewForm() {
         const supabase = getSupabaseBrowserClient();
         const { data, error } = await supabase
           .from("stores")
-          .select("concept, place_url, trial_start_date")
+          .select("concept, place_url, trial_start_date, subscription_expires_at")
           .eq("id", storeId)
           .single();
 
         if (!error && data) {
-          const trialStatus = getTrialStatus(data.trial_start_date);
-          setTrialExpired(trialStatus.isExpired);
+          let isExpired = false;
+          const now = new Date();
+
+          // 1단계: 기본 트라이얼 검사
+          if (data.trial_start_date) {
+            const trialStatus = getTrialStatus(data.trial_start_date);
+            isExpired = trialStatus.isExpired;
+          }
+
+          // 2단계: 유료 결제일이 있다면 그걸로 덮어쓰기 (가장 중요)
+          if (data.subscription_expires_at) {
+            const expiry = new Date(data.subscription_expires_at);
+            isExpired = expiry < now;
+          }
+
+          setTrialExpired(isExpired);
           setLoadingTrial(false);
 
           try {
@@ -339,7 +353,24 @@ function ReviewForm() {
         await markReviewLogCopied(generatedRowId);
       }
 
-      window.open(placeUrl.trim(), "_blank", "noopener,noreferrer");
+      const placeUrlStr = placeUrl.trim();
+      let targetUrl = placeUrlStr;
+      
+      // 1. 고유 ID 추출 및 URL 강제 조립
+      const idMatch = placeUrlStr.match(/(?:place|restaurant)\/(\d+)/);
+      
+      if (idMatch && idMatch[1]) {
+        const placeId = idMatch[1];
+        // 2. 골든 URL 생성
+        targetUrl = `https://m.place.naver.com/restaurant/${placeId}/review/visitor`;
+      } else {
+        // 3. 예외 처리: ID 추출 실패 시 가급적 모바일 환경으로 변환
+        if (targetUrl.includes("place.naver.com") && !targetUrl.includes("m.place.naver.com")) {
+          targetUrl = targetUrl.replace("place.naver.com", "m.place.naver.com");
+        }
+      }
+
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
 
     } catch (e) {
       console.error("Copy or open failed:", e);
